@@ -1,0 +1,8 @@
+{
+  "name": "OSINT Search Terminal",
+  "description": "Multi-tab simultaneous OSINT investigation portal with mobile/target intelligence, vehicle record simulation, Post Office PIN/Place lookup, IMEI/TAC metadata discovery, and AI-powered relationship linkage mapping.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

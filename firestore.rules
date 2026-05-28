@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Catch-all rules allowing complete read/write operations for tracks collaboration
+    match /{document=**} {
+      allow read, write: if true;
+    }
+    
+    match /profiles/{profileId} {
+      allow read, write: if true;
+    }
+    
+    match /routes/{routeId} {
+      allow read, write: if true;
+    }
+  }
+}

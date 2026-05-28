@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "TargetProfile": {
+      "title": "TargetProfile",
+      "description": "Suspect tracker profiles containing custom coordinates and timeline points",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the profile" },
+        "name": { "type": "string", "description": "Suspect name" },
+        "caseNumber": { "type": "string", "description": "Legal case tracking number" },
+        "markerColor": { "type": "string", "description": "Color hex representing marker track on GIS map" },
+        "isVisible": { "type": "boolean", "description": "Whether coordinates are displayed on the trace overlay" },
+        "locations": { "type": "array", "description": "List of LocationFix coordinates history chronologically sorted" }
+      },
+      "required": ["id", "name", "locations"]
+    },
+    "TracedRoute": {
+      "title": "TracedRoute",
+      "description": "AI-traced route connecting specific coordinates with street snaps on the map",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the saved route" },
+        "profileId": { "type": "string", "description": "ID of the target profile associated with this route" },
+        "name": { "type": "string", "description": "Name given to this saved route" },
+        "routePoints": { "type": "array", "description": "Interpolated actual road steps" },
+        "summaryText": { "type": "string", "description": "Summary explaining the AI-resolved routing" },
+        "createdAt": { "type": "string", "description": "Timestamp when the route was created" }
+      },
+      "required": ["id", "profileId", "name", "routePoints"]
+    }
+  },
+  "firestore": {
+    "/profiles/{profileId}": {
+      "schema": "TargetProfile",
+      "description": "Saved criminal tracing target profiles and coordinates"
+    },
+    "/routes/{routeId}": {
+      "schema": "TracedRoute",
+      "description": "AI street traced routes connecting tower data snapshots"
+    }
+  }
+}
