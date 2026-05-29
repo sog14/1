@@ -7,14 +7,16 @@ import {
 import { TargetProfile, SherlockProfile } from "../types";
 import { jsPDF } from "jspdf";
 
-// ==========================================
-// PRODUCTION ROUTING CONFIGURATION
-// ==========================================
-// When running locally, relative routes work via local proxy setups.
-// When hosted on GitHub Pages, it must point directly to your secure live cloud backend.
-const API_BASE_URL = typeof window !== "undefined" && window.location.hostname === "localhost"
-  ? "" 
-  : "https://true-call-check.vercel.app"; // <-- Ensure this matches your secure live production backend address
+// ========================================================
+// PRODUCTION OSINT ROUTING CROSS-ORIGIN CONFIGURATION
+// ========================================================
+// GitHub Pages hosts static layouts only. We force-route production queries out to your cloud engine.
+const PRODUCTION_BACKEND_URL = "https://true-call-check.vercel.app"; 
+
+const API_BASE_URL = typeof window !== "undefined" && 
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+    ? "" 
+    : PRODUCTION_BACKEND_URL;
 
 const getHopColorScheme = (hop: number) => {
   switch (hop) {
@@ -314,7 +316,6 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       }
 
       try {
-        // Enforce the API_BASE_URL to prevent 404 relative deployment skips
         const response = await fetch(`${API_BASE_URL}/api/search-targets`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -409,7 +410,6 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       
       if (primaryPhoneQuery) {
         try {
-          // Explicitly applied base path route logic
           const sherlockRes = await fetch(`${API_BASE_URL}/api/sherlock-mock`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -420,11 +420,10 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
             if (shData.success) setSherlock(shData.data);
           }
         } catch (e) {
-          console.error("Sherlock engine bypassed configuration rules.");
+          console.error("Sherlock layer error bypassed safely.");
         }
       }
 
-      // Reusable index check finder running safely on single query steps
       const fetchUniqueRecordsForNumber = async (num: string): Promise<TargetProfile[]> => {
         let subProfiles: TargetProfile[] = [];
         
@@ -457,7 +456,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
               }
             }
           } catch (err) {
-            // Disconnect fallback
+            // Execution context drop fallback
           }
         }
 
@@ -471,7 +470,6 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       const finalRecursiveMatches: TargetProfile[] = [];
       let hopCounterTracker = 1;
 
-      // UNIFIED SYSTEM QUEUE RUNNER: Operates on a single processing queue mirroring the vanilla JS snippet
       while (discoveryQueue.length > 0) {
         let altNum = discoveryQueue.shift()!;
         const derivedProfiles = await fetchUniqueRecordsForNumber(altNum);
@@ -520,7 +518,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
 
     } catch (err: any) {
       setError(err.message || "An issue occurred while searching target records.");
-    } {
+    } finally {
       setLoading(false);
       if (typeof window !== "undefined" && window.activeTaskRunningState) {
         window.activeTaskRunningState.phone = false;
