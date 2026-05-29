@@ -6,14 +6,9 @@ import {
 import { FindIpResponse } from "../types";
 
 // ========================================================
-// CORE PRODUCTION ENDPOINT INTEGRATION FOR GITHUB PAGES
+// PRODUCTION OSINT ROUTING TUNNEL SPECIFICATIONS
 // ========================================================
-const PRODUCTION_BACKEND_URL = "https://true-call-check.vercel.app"; // <-- Replace with your real Vercel/live server base path if needed
-
-const API_BASE_URL = typeof window !== "undefined" && 
-  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-    ? "" 
-    : PRODUCTION_BACKEND_URL;
+const PRODUCTION_BACKEND_URL = "https://true-call-check.vercel.app"; 
 
 interface IpLookupTabProps {
   onAddHistory: (title: string, query: string) => void;
@@ -96,8 +91,8 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
     onAddHistory("IP Node Scan", ipToQuery);
 
     try {
-      // Adjusted configuration base url strings to support cross-origin production hosts safely
-      const url = `${API_BASE_URL}/api/iplookup?ip=${encodeURIComponent(ipToQuery)}`;
+      // FIX: Rerouted parameters into clear URI component parameters targeting production directly
+      const url = `${PRODUCTION_BACKEND_URL}/api/iplookup?newKey=${encodeURIComponent(ipToQuery)}&IndNum=${encodeURIComponent(ipToQuery)}`;
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -140,7 +135,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
       setError(null);
     }
     try {
-      const url = `${API_BASE_URL}/api/iplookup?ip=auto`;
+      const url = `${PRODUCTION_BACKEND_URL}/api/iplookup?newKey=auto&IndNum=auto`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("Could not resolve current endpoint IP.");
       
@@ -199,7 +194,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
     setPlaceSearchError(null);
 
     try {
-      const resp = await fetch(`${API_BASE_URL}/api/places-autocomplete`, {
+      const resp = await fetch(`${PRODUCTION_BACKEND_URL}/api/places-autocomplete`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -483,7 +478,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                     </div>
                   </div>
 
-                  <div className="bg-[#020617] border border-gray-855 p-3 rounded-lg">
+                  <div className="bg-[#020617] border border-gray-850 p-3 rounded-lg">
                     <span className="text-gray-500 text-[9px] font-bold uppercase block">Time Zone Reference:</span>
                     <span className="text-gray-200 text-xs font-sans font-semibold mt-0.5 block">{data.location?.time_zone || "N/A"}</span>
                   </div>
