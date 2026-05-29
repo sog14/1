@@ -439,10 +439,14 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
         return subProfiles;
       };
 
+      // === STAGE 2 START ===
+      console.log("=== STAGE 2 START ===");
       // 2. STEP 2: SWEEP ONLY DEDICATED DIRECT ALTERNATIVES
       const finalUniqueRecursiveCards: TargetProfile[] = [];
       const seenKeys = new Set<string>();
       let indexTracker = 1;
+
+      const step3MobilesToSearch = new Set<string>();
 
       for (const altNum of Array.from(step2MobilesToSearch)) {
         const derivedProfiles = await fetchUniqueRecordsForNumber(altNum);
@@ -458,6 +462,42 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
             parsedRecord.hopCount = 1; 
             parsedRecord.linkedVia = `+91 ${altNum} (Direct alternate contact trace from core target profile)`;
             finalUniqueRecursiveCards.push(parsedRecord);
+            indexTracker++;
+          }
+
+          // Gather any alternate contacts discovered inside Stage 2 results for Stage 3 search, avoiding any double-search
+          ['mobile', 'alt_mobile', 'alt_mobile2', 'alt_mobile3', 'alt_mobile4'].forEach(k => {
+            const val = subRecord[k as 'mobile' | 'alt_mobile' | 'alt_mobile2' | 'alt_mobile3' | 'alt_mobile4'];
+            if (val && val !== "N/A") {
+              const extracted = extractAllMobiles(val);
+              extracted.forEach(cleaned => {
+                if (cleaned && !processedNumbers.has(cleaned)) {
+                  step3MobilesToSearch.add(cleaned);
+                  processedNumbers.add(cleaned); // Guard against double search
+                }
+              });
+            }
+          });
+        }
+      }
+
+      // === STAGE 3 START ===
+      console.log("=== STAGE 3 START ===");
+      // 3. STEP 3: SWEEP ALTERNATE CONTACTS DISCOVERED IN STAGE 2
+      for (const altNum3 of Array.from(step3MobilesToSearch)) {
+        const derivedProfiles3 = await fetchUniqueRecordsForNumber(altNum3);
+        
+        for (const subRecord3 of derivedProfiles3) {
+          if (!subRecord3) continue;
+
+          const uniqueKey3 = `${(subRecord3.name || "").trim().toUpperCase()}_${(subRecord3.mobile || "").trim()}`;
+          if (!seenKeys.has(uniqueKey3)) {
+            seenKeys.add(uniqueKey3);
+            
+            const parsedRecord3 = { ...subRecord3 };
+            parsedRecord3.hopCount = 2; // HOP 2
+            parsedRecord3.linkedVia = `+91 ${altNum3} (Indirect alternate contact trace from Stage 2 node)`;
+            finalUniqueRecursiveCards.push(parsedRecord3);
             indexTracker++;
           }
         }
