@@ -7,6 +7,15 @@ import {
 import { TargetProfile, SherlockProfile } from "../types";
 import { jsPDF } from "jspdf";
 
+// ==========================================
+// PRODUCTION ROUTING CONFIGURATION
+// ==========================================
+// When running locally, relative routes work via local proxy setups.
+// When hosted on GitHub Pages, it must point directly to your secure live cloud backend.
+const API_BASE_URL = typeof window !== "undefined" && window.location.hostname === "localhost"
+  ? "" 
+  : "https://true-call-check.vercel.app"; // <-- Ensure this matches your secure live production backend address
+
 const getHopColorScheme = (hop: number) => {
   switch (hop) {
     case 1:
@@ -292,13 +301,11 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
     }
 
     try {
-      // EXACT OSINT CONSOLE RE-ENGINEERING: Master deduplication structures
-      let processedNumbers = new Set<string>();
+      const processedNumbers = new Set<string>();
       let discoveryQueue: string[] = [];
       let fetchedProfiles: TargetProfile[] = [];
       let isFallbackMode = false;
       
-      // Setup initial inputs matching the parsed query strategy
       if (searchType === "phone") {
         let cleanMain = cleanMobile(queryPayload);
         if (cleanMain) {
@@ -307,7 +314,8 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       }
 
       try {
-        const response = await fetch("/api/search-targets", {
+        // Enforce the API_BASE_URL to prevent 404 relative deployment skips
+        const response = await fetch(`${API_BASE_URL}/api/search-targets`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query: queryPayload, type: searchType })
@@ -331,7 +339,6 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
         isFallbackMode = true;
       }
       
-      // Core local map query strategy block
       if (isFallbackMode || fetchedProfiles.length === 0) {
         if (searchType === "phone") {
           const queryPhones = extractAllMobiles(queryPayload);
@@ -375,7 +382,6 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
         }
       }
 
-      // Populate processing filters and append discovered numbers to queue from primary cards
       fetchedProfiles.forEach(record => {
         if (record.mobile) {
           let mClean = cleanMobile(record.mobile);
@@ -403,7 +409,8 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       
       if (primaryPhoneQuery) {
         try {
-          const sherlockRes = await fetch("/api/sherlock-mock", {
+          // Explicitly applied base path route logic
+          const sherlockRes = await fetch(`${API_BASE_URL}/api/sherlock-mock`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ number: primaryPhoneQuery })
@@ -413,31 +420,23 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
             if (shData.success) setSherlock(shData.data);
           }
         } catch (e) {
-          console.error("Sherlock bypassed.");
+          console.error("Sherlock engine bypassed configuration rules.");
         }
       }
 
-      // ==========================================
-      // ADAPTED DYNAMIC QUEUE LOOP SCANNERS (FROM PROVIDED PERFORMANCE LOGIC)
-      // ==========================================
-      const finalRecursiveMatches: TargetProfile[] = [];
-      let hopCounterTracker = 1;
-
-      while (discoveryQueue.length > 0) {
-        let altNum = discoveryQueue.shift()!;
-        
-        // Exact structural lookup sequence strategy applied perfectly here
+      // Reusable index check finder running safely on single query steps
+      const fetchUniqueRecordsForNumber = async (num: string): Promise<TargetProfile[]> => {
         let subProfiles: TargetProfile[] = [];
         
-        if (REAL_CONTACT_MAP[altNum]) {
-          subProfiles.push({ ...REAL_CONTACT_MAP[altNum] });
+        if (REAL_CONTACT_MAP[num]) {
+          subProfiles.push({ ...REAL_CONTACT_MAP[num] });
         } else {
           const poolMatches = GLOBAL_LEO_POOL.filter(p => {
-            return altNum === cleanMobile(p.mobile) || 
-                   altNum === cleanMobile(p.alt_mobile) || 
-                   altNum === cleanMobile(p.alt_mobile2) || 
-                   altNum === cleanMobile(p.alt_mobile3) || 
-                   altNum === cleanMobile(p.alt_mobile4);
+            return num === cleanMobile(p.mobile) || 
+                   num === cleanMobile(p.alt_mobile) || 
+                   num === cleanMobile(p.alt_mobile2) || 
+                   num === cleanMobile(p.alt_mobile3) || 
+                   num === cleanMobile(p.alt_mobile4);
           });
           poolMatches.forEach(pm => {
             if (!subProfiles.some(sp => sp.mobile === pm.mobile)) subProfiles.push({ ...pm });
@@ -446,10 +445,10 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
 
         if (subProfiles.length === 0) {
           try {
-            const crawlRes = await fetch("/api/search-targets", {
+            const crawlRes = await fetch(`${API_BASE_URL}/api/search-targets`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query: altNum, type: "phone" })
+              body: JSON.stringify({ query: num, type: "phone" })
             });
             if (crawlRes.ok) {
               const subData = await crawlRes.json();
@@ -458,17 +457,27 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
               }
             }
           } catch (err) {
-            // Server bypass fallback
+            // Disconnect fallback
           }
         }
 
         if (subProfiles.length === 0) {
-          subProfiles.push(generateDynamicProfile(altNum));
+          subProfiles.push(generateDynamicProfile(num));
         }
+        
+        return subProfiles;
+      };
 
-        // Process resolved profiles and dynamically extend queue dynamically for new vectors
-        subProfiles.forEach(subRecord => {
-          if (!subRecord) return;
+      const finalRecursiveMatches: TargetProfile[] = [];
+      let hopCounterTracker = 1;
+
+      // UNIFIED SYSTEM QUEUE RUNNER: Operates on a single processing queue mirroring the vanilla JS snippet
+      while (discoveryQueue.length > 0) {
+        let altNum = discoveryQueue.shift()!;
+        const derivedProfiles = await fetchUniqueRecordsForNumber(altNum);
+        
+        for (const subRecord of derivedProfiles) {
+          if (!subRecord) continue;
           
           let subMobClean = cleanMobile(subRecord.mobile);
           if (subMobClean && !processedNumbers.has(subMobClean)) {
@@ -486,15 +495,13 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
             }
           });
 
-          // Set relationship gaps safely matching layout maps
           subRecord.hopCount = hopCounterTracker <= 12 ? 1 : 2; 
           subRecord.linkedVia = `+91 ${altNum} (Linked structural node verification trace loop)`;
           finalRecursiveMatches.push(subRecord);
           hopCounterTracker++;
-        });
+        }
       }
 
-      // Clear layout intersections duplicates
       const deduplicatedRecursiveList: TargetProfile[] = [];
       const seenKeys = new Set<string>();
 
@@ -513,7 +520,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
 
     } catch (err: any) {
       setError(err.message || "An issue occurred while searching target records.");
-    } finally {
+    } {
       setLoading(false);
       if (typeof window !== "undefined" && window.activeTaskRunningState) {
         window.activeTaskRunningState.phone = false;
@@ -527,7 +534,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
     const allProfiles = [...profiles, ...recursiveMatches];
     
     try {
-      const response = await fetch("/api/analyze-linkages", {
+      const response = await fetch(`${API_BASE_URL}/api/analyze-linkages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profiles: allProfiles })
@@ -1623,10 +1630,10 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                       <div className="flex justify-between"><span className="text-gray-400 font-mono text-xs">Father's Name:</span> <span className="text-white font-semibold font-sans">{p.father_name || "N/A"}</span></div>
                       <div className="flex justify-between"><span className="text-gray-400 font-mono text-xs">Mobile Vector:</span> <span className="text-brand-cyan font-mono font-bold tracking-wide">+91 {p.mobile || "N/A"}</span></div>
                       {p.DocumentNumber && p.DocumentNumber !== "N/A" && (
-                        <div className="flex justify-between"><span className="text-gray-400 font-mono text-xs">Identity Doc:</span> <span className="text-white font-mono break-all">{p.DocumentNumber}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-455 text-[10px]">Identity Doc:</span> <span className="text-white font-mono break-all">{p.DocumentNumber}</span></div>
                       )}
                       {p.email && p.email !== "N/A" && (
-                        <div className="flex justify-between"><span className="text-gray-400 font-mono text-xs">E-mail:</span> <span className="text-white font-mono text-xs">{p.email}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-455 text-[10px]">E-mail:</span> <span className="text-white font-mono text-xs">{p.email}</span></div>
                       )}
                       <div className="flex flex-col pt-1.5 border-t border-gray-800/40">
                         <div className="flex justify-between items-center mb-1">
