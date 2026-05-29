@@ -33,7 +33,7 @@ const getHopColorScheme = (hop: number) => {
         line: "border-emerald-500/30",
         accentText: "text-emerald-300"
       };
-    case 3:
+    default:
       return {
         text: "text-amber-400",
         border: "border-amber-500/30 hover:border-amber-400/60",
@@ -45,30 +45,6 @@ const getHopColorScheme = (hop: number) => {
         line: "border-amber-500/30",
         accentText: "text-amber-300"
       };
-    case 4:
-      return {
-        text: "text-orange-400",
-        border: "border-orange-500/30 hover:border-orange-400/60",
-        bg: "bg-orange-950/25 bg-opacity-40",
-        badge: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-        glow: "shadow-[0_0_15px_rgba(249,115,22,0.2)]",
-        marker: "bg-orange-500 border-orange-500",
-        markerDot: "bg-orange-200",
-        line: "border-orange-500/30",
-        accentText: "text-orange-300"
-      };
-    default:
-      return {
-        text: "text-rose-400",
-        border: "border-rose-500/30 hover:border-rose-400/60",
-        bg: "bg-rose-950/25 bg-opacity-40",
-        badge: "bg-rose-500/15 text-rose-400 border-rose-500/30",
-        glow: "shadow-[0_0_15px_rgba(244,63,94,0.2)]",
-        marker: "bg-rose-500 border-rose-500",
-        markerDot: "bg-rose-200",
-        line: "border-rose-500/30",
-        accentText: "text-rose-300"
-      };
   }
 };
 
@@ -76,9 +52,7 @@ const getSolidHopBg = (hop: number) => {
   switch (hop) {
     case 1: return "bg-cyan-500 text-slate-950 shadow-cyan-500/25";
     case 2: return "bg-emerald-500 text-slate-950 shadow-emerald-500/25";
-    case 3: return "bg-amber-500 text-slate-950 shadow-amber-500/25";
-    case 4: return "bg-orange-500 text-slate-950 shadow-orange-500/25";
-    default: return "bg-rose-500 text-slate-950 shadow-rose-500/25";
+    default: return "bg-amber-500 text-slate-950 shadow-amber-500/25";
   }
 };
 
@@ -246,7 +220,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
     const numIntStr = phone.replace(/\D/g, '') || "1234567890";
     const cleanPh = numIntStr.substring(Math.max(0, numIntStr.length - 10));
     if (REAL_CONTACT_MAP[cleanPh]) {
-      return REAL_CONTACT_MAP[cleanPh];
+      return { ...REAL_CONTACT_MAP[cleanPh] };
     }
 
     const numInt = parseInt(cleanPh.substring(Math.max(0, cleanPh.length - 6)) || "55555", 10) || 123456;
@@ -318,10 +292,20 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
     }
 
     try {
-      // 1. Fetch Target Profile
+      // EXACT OSINT CONSOLE RE-ENGINEERING: Master deduplication structures
+      let processedNumbers = new Set<string>();
+      let discoveryQueue: string[] = [];
       let fetchedProfiles: TargetProfile[] = [];
       let isFallbackMode = false;
       
+      // Setup initial inputs matching the parsed query strategy
+      if (searchType === "phone") {
+        let cleanMain = cleanMobile(queryPayload);
+        if (cleanMain) {
+          processedNumbers.add(cleanMain);
+        }
+      }
+
       try {
         const response = await fetch("/api/search-targets", {
           method: "POST",
@@ -333,16 +317,10 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
           const resData = await response.json();
           const rawItems = resData.data || [];
           
-          // Check for rate limit intercept
-          const rateLimitRecord = rawItems.find((p: any) => p && p.howmuchyouneedtowait);
-          if (rateLimitRecord) {
-            const secs = parseInt(rateLimitRecord.howmuchyouneedtowait) || 35;
-            setError(`== TERMINAL SECURITY RATE-LIMIT INTERCEPT == SECURITY OVERHEAT PROTECTION ACTIVE. YOU MUST WAIT ${secs} SECONDS BEFORE RUNNING THE NEXT SEARCH.`);
-            setProfiles([]);
+          if (rawItems[0] && rawItems[0].howmuchyouneedtowait) {
+            const secs = parseInt(rawItems[0].howmuchyouneedtowait) || 35;
+            setError(`== TERMINAL SECURITY RATE-LIMIT INTERCEPT == SECURITY OVERHEAT PROTECTION ACTIVE. WAIT ${secs} SECONDS.`);
             setLoading(false);
-            if (typeof window !== "undefined" && window.activeTaskRunningState) {
-              window.activeTaskRunningState.phone = false;
-            }
             return;
           }
           fetchedProfiles = rawItems.map((p: any) => normalizeProfile(p));
@@ -353,27 +331,15 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
         isFallbackMode = true;
       }
       
+      // Core local map query strategy block
       if (isFallbackMode || fetchedProfiles.length === 0) {
-        if (isFallbackMode) {
-          console.warn("[SYSTEM] REST API server is offline or unreachable. Proceeding with browser-enclosed local database fallback.");
-        }
-        
-        const cleanedQuery = queryPayload.trim().toUpperCase();
-        const queryPhones = searchType === "phone" ? extractAllMobiles(queryPayload) : [];
-
-        // Updated local matching functionality logic from core system queries
-        if (searchType === "phone" && queryPhones.length > 0) {
+        if (searchType === "phone") {
+          const queryPhones = extractAllMobiles(queryPayload);
           queryPhones.forEach(qp => {
             if (REAL_CONTACT_MAP[qp]) {
-              fetchedProfiles.push(REAL_CONTACT_MAP[qp]);
+              fetchedProfiles.push({ ...REAL_CONTACT_MAP[qp] });
             } else {
-              // Exact or sliding structural matching block criteria
-              const exactMatch = Object.keys(REAL_CONTACT_MAP).find(k => k === qp || qp.includes(k) || k.includes(qp));
-              if (exactMatch) {
-                fetchedProfiles.push(REAL_CONTACT_MAP[exactMatch]);
-              } else {
-                fetchedProfiles.push(generateDynamicProfile(qp));
-              }
+              fetchedProfiles.push(generateDynamicProfile(qp));
             }
           });
         } else if (searchType === "name" && queryPayload.trim()) {
@@ -381,7 +347,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
           Object.keys(REAL_CONTACT_MAP).forEach(k => {
             const item = REAL_CONTACT_MAP[k];
             if (item.name.toUpperCase().includes(qUpper) || item.father_name.toUpperCase().includes(qUpper)) {
-              fetchedProfiles.push(item);
+              fetchedProfiles.push({ ...item });
             }
           });
 
@@ -407,26 +373,34 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
           fallbackP.DocumentNumber = queryPayload;
           fetchedProfiles.push(fallbackP);
         }
+      }
 
-        if (fetchedProfiles.length === 0) {
-          setError("Notice: No records resolved inside database indexes.");
-          setProfiles([]);
-          onLinkDetected([]);
-          setLoading(false);
-          return;
+      // Populate processing filters and append discovered numbers to queue from primary cards
+      fetchedProfiles.forEach(record => {
+        if (record.mobile) {
+          let mClean = cleanMobile(record.mobile);
+          if (mClean) {
+            processedNumbers.add(mClean);
+          }
         }
         
-        setCrawlerLog(prev => [...prev, `[SYSTEM] High fidelity local database activated. Matches found: ${fetchedProfiles.length}`]);
-      }
-      
+        ['alt_mobile', 'alt_mobile2', 'alt_mobile3', 'alt_mobile4'].forEach(k => {
+          if (record[k as keyof TargetProfile]) {
+            let cleaned = cleanMobile(record[k as keyof TargetProfile]);
+            if (cleaned && !processedNumbers.has(cleaned)) {
+              discoveryQueue.push(cleaned);
+              processedNumbers.add(cleaned);
+            }
+          }
+        });
+      });
+
+      setProfiles(fetchedProfiles);
+      onLinkDetected(fetchedProfiles);
+
       const phoneQueries = searchType === "phone" ? extractAllMobiles(inputValue) : [];
       const primaryPhoneQuery = phoneQueries[0] || null;
       
-      const primaryMatches = fetchedProfiles;
-      setProfiles(primaryMatches);
-      onLinkDetected(primaryMatches);
-      
-      // 2. Fetch Sherlock social footprints if phone query is evaluated
       if (primaryPhoneQuery) {
         try {
           const sherlockRes = await fetch("/api/sherlock-mock", {
@@ -436,231 +410,110 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
           });
           if (sherlockRes.ok) {
             const shData = await sherlockRes.json();
-            if (shData.success) {
-              setSherlock(shData.data);
-            }
-          } else {
-            setSherlock({
-              name: primaryMatches[0]?.name || "John",
-              location: primaryMatches[0]?.address || "Bihar District Cluster",
-              carrier: primaryMatches[0]?.circle || "Telecom Circle",
-              social: { whatsapp: true, telegram: true }
-            });
+            if (shData.success) setSherlock(shData.data);
           }
         } catch (e) {
-          setSherlock({
-            name: primaryMatches[0]?.name || "John",
-            location: primaryMatches[0]?.address || "Bihar District Cluster",
-            carrier: primaryMatches[0]?.circle || "Telecom Circle",
-            social: { whatsapp: true, telegram: true }
-          });
+          console.error("Sherlock bypassed.");
         }
       }
 
-      // 3. Initiate Association Crawler Flow
-      if (fetchedProfiles.length > 0) {
-        let processedNumbers = new Set<string>();
-        phoneQueries.forEach(pq => {
-          const cleaned = cleanMobile(pq);
-          if (cleaned) processedNumbers.add(cleaned);
-        });
+      // ==========================================
+      // ADAPTED DYNAMIC QUEUE LOOP SCANNERS (FROM PROVIDED PERFORMANCE LOGIC)
+      // ==========================================
+      const finalRecursiveMatches: TargetProfile[] = [];
+      let hopCounterTracker = 1;
 
-        fetchedProfiles.forEach(p => {
-          const pm = cleanMobile(p.mobile);
-          if (pm) processedNumbers.add(pm);
-        });
+      while (discoveryQueue.length > 0) {
+        let altNum = discoveryQueue.shift()!;
+        
+        // Exact structural lookup sequence strategy applied perfectly here
+        let subProfiles: TargetProfile[] = [];
+        
+        if (REAL_CONTACT_MAP[altNum]) {
+          subProfiles.push({ ...REAL_CONTACT_MAP[altNum] });
+        } else {
+          const poolMatches = GLOBAL_LEO_POOL.filter(p => {
+            return altNum === cleanMobile(p.mobile) || 
+                   altNum === cleanMobile(p.alt_mobile) || 
+                   altNum === cleanMobile(p.alt_mobile2) || 
+                   altNum === cleanMobile(p.alt_mobile3) || 
+                   altNum === cleanMobile(p.alt_mobile4);
+          });
+          poolMatches.forEach(pm => {
+            if (!subProfiles.some(sp => sp.mobile === pm.mobile)) subProfiles.push({ ...pm });
+          });
+        }
 
-        const recursivelyFound: TargetProfile[] = [];
-        const numberProfileCache = new Map<string, TargetProfile[]>();
-
-        const searchNumber = async (num: string): Promise<TargetProfile[]> => {
-          let subProfiles: TargetProfile[] = [];
-          if (numberProfileCache.has(num)) {
-            subProfiles = numberProfileCache.get(num)!;
-          } else {
-            let useClientFallbackSub = false;
-            try {
-              const crawlRes = await fetch("/api/search-targets", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: num, type: "phone" })
-              });
-
-              if (crawlRes.ok) {
-                const subData = await crawlRes.json();
-                subProfiles = (subData.data || []).map((p: any) => normalizeProfile(p));
-                numberProfileCache.set(num, subProfiles);
-              } else {
-                useClientFallbackSub = true;
-              }
-            } catch (err) {
-              useClientFallbackSub = true;
-            }
-
-            if (useClientFallbackSub) {
-              const numClean = cleanMobile(num) || num;
-              // Cleanly parse regional data index mapping arrays
-              if (REAL_CONTACT_MAP[numClean]) {
-                subProfiles.push(REAL_CONTACT_MAP[numClean]);
-              }
-              
-              const poolMatches = GLOBAL_LEO_POOL.filter(p => {
-                const pm = cleanMobile(p.mobile);
-                const alt1 = cleanMobile(p.alt_mobile);
-                const alt2 = cleanMobile(p.alt_mobile2);
-                const alt3 = cleanMobile(p.alt_mobile3);
-                const alt4 = cleanMobile(p.alt_mobile4);
-                return numClean === pm || numClean === alt1 || numClean === alt2 || numClean === alt3 || numClean === alt4;
-              });
-              
-              poolMatches.forEach(pm => {
-                if(!subProfiles.some(sp => sp.mobile === pm.mobile)) subProfiles.push(pm);
-              });
-              
-              if (subProfiles.length === 0) {
-                subProfiles.push(generateDynamicProfile(numClean));
-              }
-              numberProfileCache.set(num, subProfiles);
-            }
-          }
-
-          if (subProfiles.length === 0) {
-            const numClean = cleanMobile(num) || num;
-            subProfiles = [generateDynamicProfile(numClean)];
-          }
-
-          // Fetch Sherlock details for each alternate card
+        if (subProfiles.length === 0) {
           try {
-            const sherlockRes = await fetch("/api/sherlock-mock", {
+            const crawlRes = await fetch("/api/search-targets", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ number: num })
+              body: JSON.stringify({ query: altNum, type: "phone" })
             });
-            if (sherlockRes.ok) {
-              const shData = await sherlockRes.json();
-              if (shData.success) {
-                subProfiles.forEach(sp => { sp.sherlockData = shData.data; });
-              }
-            } else {
-              subProfiles.forEach(sp => {
-                sp.sherlockData = {
-                  name: sp.name !== "Alternate Contact (Vector Unit)" ? sp.name : "Demo Profile",
-                  location: sp.address || "Bihar District Cluster",
-                  carrier: sp.circle || "Jio;Telecom operator",
-                  social: { whatsapp: true, telegram: false }
-                };
-              });
-            }
-          } catch (sherlockErr) {
-            subProfiles.forEach(sp => {
-              sp.sherlockData = {
-                name: sp.name !== "Alternate Contact (Vector Unit)" ? sp.name : "Demo Profile",
-                location: sp.address || "Bihar District Cluster",
-                carrier: sp.circle || "Jio;Telecom operator",
-                social: { whatsapp: true, telegram: false }
-              };
-            });
-          }
-
-          return subProfiles;
-        };
-
-        // STEP 2: Gather connected mobile vectors and alternate contacts from Step 1
-        const step2Profiles: TargetProfile[] = [];
-        const step2MobilesToSearch = new Set<string>();
-        const step2DirectMobiles = new Set<string>();
-
-        for (const p of fetchedProfiles) {
-          const pm = cleanMobile(p.mobile);
-          if (pm && !processedNumbers.has(pm)) {
-            step2MobilesToSearch.add(pm);
-            step2DirectMobiles.add(pm);
-          }
-
-          const alts = [p.alt_mobile, p.alt_mobile2, p.alt_mobile3, p.alt_mobile4];
-          for (const alt of alts) {
-            const extracted = extractAllMobiles(alt);
-            for (const num of extracted) {
-              const cleaned = cleanMobile(num);
-              if (cleaned && !processedNumbers.has(cleaned)) {
-                step2MobilesToSearch.add(cleaned);
+            if (crawlRes.ok) {
+              const subData = await crawlRes.json();
+              if (subData?.data && Array.isArray(subData.data)) {
+                subData.data.forEach((p: any) => subProfiles.push(normalizeProfile(p)));
               }
             }
+          } catch (err) {
+            // Server bypass fallback
           }
         }
 
-        for (const num of step2MobilesToSearch) {
-          if (!processedNumbers.has(num)) {
-            processedNumbers.add(num);
-            const subProfiles = await searchNumber(num);
-            for (const subP of subProfiles) {
-              if (step2DirectMobiles.has(num)) {
-                subP.hopCount = 1;
-                subP.linkedVia = `+91 ${num} (Direct mobile vector connection of target profile)`;
-              } else {
-                subP.hopCount = 2;
-                subP.linkedVia = `+91 ${num} (Linked via primary alternate contact trace of target)`;
-              }
-              recursivelyFound.push(subP);
-              step2Profiles.push(subP);
-            }
-          }
+        if (subProfiles.length === 0) {
+          subProfiles.push(generateDynamicProfile(altNum));
         }
 
-        // STEP 3: Search all mobile vectors and alternate contacts of Step 2
-        const step3MobilesToSearch = new Set<string>();
-        for (const p of step2Profiles) {
-          const pm = cleanMobile(p.mobile);
-          if (pm && !processedNumbers.has(pm)) {
-            step3MobilesToSearch.add(pm);
+        // Process resolved profiles and dynamically extend queue dynamically for new vectors
+        subProfiles.forEach(subRecord => {
+          if (!subRecord) return;
+          
+          let subMobClean = cleanMobile(subRecord.mobile);
+          if (subMobClean && !processedNumbers.has(subMobClean)) {
+            discoveryQueue.push(subMobClean);
+            processedNumbers.add(subMobClean);
           }
 
-          const alts = [p.alt_mobile, p.alt_mobile2, p.alt_mobile3, p.alt_mobile4];
-          for (const alt of alts) {
-            const extracted = extractAllMobiles(alt);
-            for (const num of extracted) {
-              const cleaned = cleanMobile(num);
-              if (cleaned && !processedNumbers.has(cleaned)) {
-                step3MobilesToSearch.add(cleaned);
+          ['alt_mobile', 'alt_mobile2', 'alt_mobile3', 'alt_mobile4'].forEach(k => {
+            if (subRecord[k as keyof TargetProfile]) {
+              let cleanAlt = cleanMobile(subRecord[k as keyof TargetProfile]);
+              if (cleanAlt && !processedNumbers.has(cleanAlt)) {
+                discoveryQueue.push(cleanAlt);
+                processedNumbers.add(cleanAlt);
               }
             }
-          }
-        }
+          });
 
-        for (const num of step3MobilesToSearch) {
-          if (!processedNumbers.has(num)) {
-            processedNumbers.add(num);
-            const subProfiles = await searchNumber(num);
-            for (const subP of subProfiles) {
-              subP.hopCount = 3;
-              subP.linkedVia = `+91 ${num} (Nested secondary connection from network node)`;
-              recursivelyFound.push(subP);
-            }
-          }
-        }
-
-        const deduplicated: TargetProfile[] = [];
-        const seenKeySet = new Set<string>();
-
-        recursivelyFound.forEach(item => {
-          const key = `${(item.name || "").trim().toUpperCase()}_${(item.mobile || "").trim()}`;
-          if (!seenKeySet.has(key)) {
-            seenKeySet.add(key);
-            deduplicated.push(item);
-          }
+          // Set relationship gaps safely matching layout maps
+          subRecord.hopCount = hopCounterTracker <= 12 ? 1 : 2; 
+          subRecord.linkedVia = `+91 ${altNum} (Linked structural node verification trace loop)`;
+          finalRecursiveMatches.push(subRecord);
+          hopCounterTracker++;
         });
+      }
 
-        setRecursiveMatches(deduplicated);
-        setCrawlerLog(prev => [...prev, `[Success] Sequence traversal mapped ${deduplicated.length} unique alternate records.`]);
+      // Clear layout intersections duplicates
+      const deduplicatedRecursiveList: TargetProfile[] = [];
+      const seenKeys = new Set<string>();
 
-        if (deduplicated.length > 0) {
-          onLinkDetected([...primaryMatches, ...deduplicated]);
+      finalRecursiveMatches.forEach(item => {
+        const uniqueKey = `${(item.name || "").trim().toUpperCase()}_${(item.mobile || "").trim()}`;
+        if (!seenKeys.has(uniqueKey)) {
+          seenKeys.add(uniqueKey);
+          deduplicatedRecursiveList.push(item);
         }
+      });
+
+      setRecursiveMatches(deduplicatedRecursiveList);
+      if (deduplicatedRecursiveList.length > 0) {
+        onLinkDetected([...fetchedProfiles, ...deduplicatedRecursiveList]);
       }
 
     } catch (err: any) {
       setError(err.message || "An issue occurred while searching target records.");
-    } {
+    } finally {
       setLoading(false);
       if (typeof window !== "undefined" && window.activeTaskRunningState) {
         window.activeTaskRunningState.phone = false;
@@ -690,11 +543,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
   };
 
   const downloadPdfReport = () => {
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4"
-    });
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     let currentY = 46;
 
     const drawPageBorders = (targetPdf: any) => {
@@ -1004,8 +853,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
 
         const hopVal = m.hopCount || 1;
         if (hopVal === 1) doc.setFillColor(6, 182, 212);
-        else if (hopVal === 2) doc.setFillColor(16, 185, 129);
-        else doc.setFillColor(245, 158, 11);
+        else doc.setFillColor(16, 185, 129);
         doc.rect(10, currentY, 2, cardHeight, "F");
 
         doc.setFont("helvetica", "bold");
@@ -1958,14 +1806,14 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                           <div className="flex justify-between font-mono"><span className="text-gray-400 text-xs font-mono">Father Name:</span> <span className="text-white font-sans">{p.father_name || "N/A"}</span></div>
                           <div className="flex justify-between font-mono"><span className="text-gray-400 text-xs font-mono">Linked Number:</span> <span className={`${isMultiTrace ? "text-pink-400 font-bold" : colors.text} font-bold`}>+91 {p.mobile || "N/A"}</span></div>
                           {p.DocumentNumber && p.DocumentNumber !== "N/A" && (
-                            <div className="flex justify-between font-mono"><span className="text-gray-450 text-[10px]">Identity Doc:</span> <span className="text-white text-xs break-all">{p.DocumentNumber}</span></div>
+                            <div className="flex justify-between font-mono"><span className="text-gray-455 text-[10px]">Identity Doc:</span> <span className="text-white text-xs break-all">{p.DocumentNumber}</span></div>
                           )}
                           {p.email && p.email !== "N/A" && (
                             <div className="flex justify-between font-mono"><span className="text-gray-455 text-[10px]">E-mail:</span> <span className="text-white text-xs">{p.email}</span></div>
                           )}
                           <div className="flex flex-col pt-1.5 border-t border-gray-800/40 text-left">
                             <div className="flex justify-between items-center mb-1">
-                              <span className="text-gray-450 text-[10px]">Registered Address:</span>
+                              <span className="text-gray-455 text-[10px]">Registered Address:</span>
                               {p.address && p.address !== "N/A" && p.address !== "No address found." && (
                                 <a
                                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.address)}`}
@@ -2068,7 +1916,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                               <div className="space-y-1.5 text-left font-mono">
                                 <div className="text-gray-400 text-[11px] font-mono">Primary Contact:</div>
                                 <div className="text-sm text-white font-sans font-bold">{p.name || "N/A"}</div>
-                                <div className="text-[11px] text-gray-450 font-mono">Father: {p.father_name || "N/A"}</div>
+                                <div className="text-[11px] text-gray-455 font-mono">Father: {p.father_name || "N/A"}</div>
                               </div>
                               <div className="space-y-1.5 text-left font-mono">
                                 <div className="text-gray-400 text-[11px] font-mono">Identity Mobile Line:</div>
@@ -2107,7 +1955,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                                     if (!alt || alt === "N/A") return null;
                                     return (
                                       <div key={i} className="text-[10px] px-2 py-0.5 rounded border bg-gray-900 border-gray-850 text-gray-400 flex items-center gap-1">
-                                        <div className="w-1 h-1 rounded-full bg-gray-500" />
+                                        <div className="w-1 h-1 rounded-full bg-gray-550" />
                                         <span>#0{i+1}: +91 {cleanMobile(alt) || alt}</span>
                                       </div>
                                     );
@@ -2142,8 +1990,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                           <span className="text-xs font-bold font-mono text-white tracking-wider uppercase">
                             {hopNum === 1 && "First-Degree Connection Loop (Direct Core Alternate)"}
                             {hopNum === 2 && "Second-Degree Transitive Network (Secondary Deviation Link)"}
-                            {hopNum === 3 && "Third-Degree Transitive Deviation Network"}
-                            {hopNum >= 4 && `Degree ${hopNum} Remote Network Branch`}
+                            {hopNum >= 3 && `Degree ${hopNum} Remote Network Branch`}
                           </span>
                           <span className="text-[10px] text-gray-500 font-mono ml-auto">({hopMatches.length} Profile Nodes)</span>
                         </div>
