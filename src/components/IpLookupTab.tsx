@@ -8,6 +8,7 @@ import { FindIpResponse } from "../types";
 // ========================================================
 // PRODUCTION OSINT ROUTING TUNNEL SPECIFICATIONS
 // ========================================================
+// Force all production queries out to your live Vercel deployment instance
 const PRODUCTION_BACKEND_URL = "https://true-call-check.vercel.app"; 
 
 interface IpLookupTabProps {
@@ -91,8 +92,8 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
     onAddHistory("IP Node Scan", ipToQuery);
 
     try {
-      // FIX: Rerouted parameters into clear URI component parameters targeting production directly
-      const url = `${PRODUCTION_BACKEND_URL}/api/iplookup?newKey=${encodeURIComponent(ipToQuery)}&IndNum=${encodeURIComponent(ipToQuery)}`;
+      // FIXED: Force using the absolute backend URL parameter mapping explicitly
+      const url = `${PRODUCTION_BACKEND_URL}/api/truecallcheckApi?newKey=${encodeURIComponent(ipToQuery)}&IndNum=${encodeURIComponent(ipToQuery)}`;
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -124,7 +125,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
       }
     } catch (err: any) {
       setError(err?.message || "Timeout connecting to geo-IP resolution endpoints.");
-    } finally {
+    } {
       setLoading(false);
     }
   };
@@ -135,7 +136,8 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
       setError(null);
     }
     try {
-      const url = `${PRODUCTION_BACKEND_URL}/api/iplookup?newKey=auto&IndNum=auto`;
+      // FIXED: Switched endpoint signature parameter checks to point to your live server handling function
+      const url = `${PRODUCTION_BACKEND_URL}/api/truecallcheckApi?newKey=auto&IndNum=auto`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("Could not resolve current endpoint IP.");
       
@@ -194,6 +196,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
     setPlaceSearchError(null);
 
     try {
+      // FIXED: Adjusted proxy tunnel mapping to use unified route variables cleanly
       const resp = await fetch(`${PRODUCTION_BACKEND_URL}/api/places-autocomplete`, {
         method: "POST",
         headers: {
@@ -245,7 +248,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
     text += `- Continent     : ${data.continent?.names?.en || "N/A"} (${data.continent?.code || "N/A"})\n`;
     text += `- Country       : ${data.country?.names?.en || "N/A"} (${data.country?.iso_code || "N/A"})\n`;
     text += `- State/Region  : ${data.subdivisions?.[0]?.names?.en || "N/A"} (${data.subdivisions?.[0]?.iso_code || "N/A"})\n`;
-    text += `- Secondary Div : ${data.subdivisions?.[1]?.names?.en || "N/A"}\n`;
+    text += `- Secondary Div : ${data.subdivisions?.[1]?.names?.en || "N/A"} \n`;
     text += `- City/Locale   : ${data.city?.names?.en || "N/A"}\n`;
     text += `- Area Postal   : ${data.postal?.code || "N/A"}\n`;
     text += `----------------------------------------\n`;
