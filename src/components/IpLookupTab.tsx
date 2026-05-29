@@ -5,6 +5,11 @@ import {
 } from "lucide-react";
 import { FindIpResponse } from "../types";
 
+// ========================================================
+// PRODUCTION OSINT ROUTING TUNNEL SPECIFICATIONS
+// ========================================================
+const PRODUCTION_BACKEND_URL = "https://true-call-check.vercel.app"; 
+
 interface IpLookupTabProps {
   onAddHistory: (title: string, query: string) => void;
 }
@@ -16,14 +21,14 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
   const [data, setData] = useState<FindIpResponse | null>(null);
   const [localTimeAtTarget, setLocalTimeAtTarget] = useState<string>("");
 
-  // RapidAPI places autocomplete query state
+  // Places query states
   const [mapSearchInput, setMapSearchInput] = useState("Restaurant");
   const [mapSuggestions, setMapSuggestions] = useState<any[]>([]);
   const [placeSearchLoading, setPlaceSearchLoading] = useState(false);
   const [placeSearchError, setPlaceSearchError] = useState<string | null>(null);
   const [interactiveMapQuery, setInteractiveMapQuery] = useState<string>("");
 
-  // Map settings states: zoom, hover positioning and active hover tracker
+  // Map settings states
   const [mapZoom, setMapZoom] = useState<number>(13);
   const [isHoveringMap, setIsHoveringMap] = useState<boolean>(false);
   const [hoverOffset, setHoverOffset] = useState({ x: 0, y: 0 });
@@ -86,7 +91,8 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
     onAddHistory("IP Node Scan", ipToQuery);
 
     try {
-      const url = `/api/iplookup?ip=${encodeURIComponent(ipToQuery)}`;
+      // POINT DIRECTLY TO THE IP ROUTE: Targets /api/iplookup on your external deployment server
+      const url = `${PRODUCTION_BACKEND_URL}/api/iplookup?newKey=${encodeURIComponent(ipToQuery)}&IndNum=${encodeURIComponent(ipToQuery)}&ip=${encodeURIComponent(ipToQuery)}`;
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -102,7 +108,6 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
       const resData: FindIpResponse = resJson.data;
       setData(resData);
 
-      // Initialize clock time immediately
       if (resData.location?.time_zone) {
         try {
           const timeString = new Date().toLocaleTimeString("en-US", {
@@ -130,7 +135,8 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
       setError(null);
     }
     try {
-      const url = `/api/iplookup?ip=auto`;
+      // Targets the dynamic autodetection endpoint path on your absolute external server mapping
+      const url = `${PRODUCTION_BACKEND_URL}/api/iplookup?newKey=auto&IndNum=auto&ip=auto`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("Could not resolve current endpoint IP.");
       
@@ -189,7 +195,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
     setPlaceSearchError(null);
 
     try {
-      const resp = await fetch("/api/places-autocomplete", {
+      const resp = await fetch(`${PRODUCTION_BACKEND_URL}/api/places-autocomplete`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -240,7 +246,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
     text += `- Continent     : ${data.continent?.names?.en || "N/A"} (${data.continent?.code || "N/A"})\n`;
     text += `- Country       : ${data.country?.names?.en || "N/A"} (${data.country?.iso_code || "N/A"})\n`;
     text += `- State/Region  : ${data.subdivisions?.[0]?.names?.en || "N/A"} (${data.subdivisions?.[0]?.iso_code || "N/A"})\n`;
-    text += `- Secondary Div : ${data.subdivisions?.[1]?.names?.en || "N/A"}\n`;
+    text += `- Secondary Div : ${data.subdivisions?.[1]?.names?.en || "N/A"} \n`;
     text += `- City/Locale   : ${data.city?.names?.en || "N/A"}\n`;
     text += `- Area Postal   : ${data.postal?.code || "N/A"}\n`;
     text += `----------------------------------------\n`;
@@ -276,7 +282,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
       <div className="bg-[#0f172a] rounded-xl border border-gray-800 p-5 glow-orange">
         <h2 className="text-sm font-semibold text-brand-orange tracking-wider uppercase mb-4 flex items-center gap-2 font-mono">
           <Globe className="w-4 h-4 text-brand-orange animate-spin-slow" /> Geolocation IP Trace Terminal
-        </h2>
+        </h2> 
 
         <div className="space-y-4">
           <div className="space-y-1 text-left">
@@ -458,7 +464,6 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
             </h3>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-              {/* Internal Left: Coordinates & Clock Details */}
               <div className="lg:col-span-4 flex flex-col justify-between space-y-4">
                 <div className="space-y-4">
                   <span className="text-[10px] text-gray-400 uppercase font-bold tracking-widest block border-b border-gray-850 pb-1">GPS Telemetry Specifications</span>
@@ -510,7 +515,6 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                 </div>
               </div>
 
-              {/* Internal Right: Large Interactive Map Viewer */}
               <div className="lg:col-span-8 flex flex-col space-y-3">
                 <div className="flex items-center justify-between bg-[#020617] border border-gray-850 p-2 px-3 rounded-lg">
                   <div className="flex items-center gap-2 text-xs text-gray-300">
@@ -518,7 +522,6 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                     <span className="font-bold">LIVE GRID PLOTTER</span>
                   </div>
                   
-                  {/* Interactive Zoom Control Interface inside the card! */}
                   <div className="flex items-center gap-3 font-mono">
                     <span className="text-[10px] text-gray-500 font-bold uppercase">Grid Zoom: {mapZoom}x</span>
                     
@@ -549,7 +552,6 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                   </div>
                 </div>
 
-                {/* Map container with mouse coordinate hover events and standard bright/color mode maps */}
                 {data.location?.latitude && data.location?.longitude && (
                   <div 
                     onMouseEnter={() => setIsHoveringMap(true)}
@@ -557,7 +559,6 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                     onMouseMove={handleMouseMove}
                     className="relative overflow-hidden rounded-lg border border-gray-850 bg-[#020617] h-[350px] transition-all duration-300 group shadow-[0_10px_35px_rgba(0,0,0,0.6)] hover:border-brand-orange/30 hover:scale-[1.002]"
                   >
-                    {/* Standard brightness, high contrast, non-inverted Google Map (Light Mode styled colorful maps as requested!) */}
                     <iframe
                       title="OSINT Target Plot Map"
                       src={`https://maps.google.com/maps?q=${encodeURIComponent(interactiveMapQuery || `${data.location.latitude},${data.location.longitude}`)}&z=${mapZoom}&t=m&output=embed`}
@@ -566,7 +567,6 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                       allowFullScreen
                     ></iframe>
 
-                    {/* Cursor floating hover details readout HUD! */}
                     {isHoveringMap && (
                       <div 
                         className="absolute bg-black/95 text-[10px] text-brand-orange font-mono p-2.5 rounded-lg border border-brand-orange/40 pointer-events-none shadow-2xl space-y-1 backdrop-blur-sm transition-all duration-75 z-20"
@@ -587,8 +587,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                       </div>
                     )}
 
-                    {/* Floating Tactical Overlay hud elements */}
-                    <div className="absolute top-3 left-3 bg-[#020617]/95 backdrop-blur-sm border border-brand-orange/40 px-3 py-1.5 rounded text-[9px] font-mono text-brand-orange font-bold flex items-center gap-2 shadow-lg">
+                    <div className="absolute top-3 left-3 bg-brand-orange/10 border border-brand-orange/30 px-3 py-1.5 rounded text-[9px] font-mono text-brand-orange font-bold flex items-center gap-2 shadow-lg backdrop-blur-sm">
                       <div className="w-1.5 h-1.5 rounded-full bg-brand-orange animate-ping" />
                       COORDINATES GRID RESOLVED
                     </div>
@@ -598,7 +597,6 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                       <span className="text-brand-orange font-bold">MODE: STANDARD LIGHT-GRID (NON-INVERTED)</span>
                     </div>
 
-                    {/* Centered target crosshair when hovering map */}
                     {isHoveringMap && (
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="w-12 h-12 rounded-full border border-brand-orange/40 flex items-center justify-center animate-spin-slow">
@@ -616,7 +614,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
         </div>
       )}
 
-      {/* SOG-14 POI Surveillance Terminal */}
+      {/* POI Surveillance Terminal */}
       {data && data.location?.latitude && data.location?.longitude && (
         <div className="bg-[#0f172a] rounded-xl border border-gray-800 p-5 font-mono text-left space-y-4 animate-fadeIn">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b border-gray-800 pb-3">
@@ -634,7 +632,6 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left controller: query categories & inputs */}
             <div className="space-y-3 lg:col-span-1">
               <div className="space-y-1">
                 <label className="text-[10px] text-gray-400 font-bold uppercase">Landmark / Category Input:</label>
@@ -657,7 +654,6 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                 </div>
               </div>
 
-              {/* Quick search shortcuts */}
               <div className="space-y-1.5">
                 <span className="text-[9px] text-gray-500 uppercase font-bold tracking-wider">Quick Signal Filters</span>
                 <div className="grid grid-cols-2 gap-2">
@@ -684,7 +680,6 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
               </div>
             </div>
 
-            {/* Right: Search results suggestions list */}
             <div className="lg:col-span-2 bg-[#020617] rounded-lg border border-gray-850 p-4 min-h-[180px] flex flex-col justify-between">
               <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
                 {placeSearchLoading ? (
@@ -702,14 +697,11 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                   </div>
                 ) : (
                   mapSuggestions.map((item: any, idx: number) => {
-                    // Extract text layout from prediction response
                     const predictionText = item.placePrediction?.text?.text || item.description || "";
                     const structuredText = item.placePrediction?.structuredFormat;
                     const mainText = structuredText?.mainText?.text || predictionText;
                     const secondaryText = structuredText?.secondaryText?.text || "";
-
                     const placeId = item.placePrediction?.placeId || item.place_id || "";
-
                     const isPlottedOnMap = interactiveMapQuery === predictionText;
 
                     return (
@@ -743,7 +735,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
               </div>
 
               {mapSuggestions.length > 0 && (
-                <div className="text-[9px] text-gray-500 text-left border-t border-gray-850/60 pt-2 shrink-0 flex justify-between uppercase">
+                <div className="text-[9px] text-gray-500 text-left border-t border-gray-850 pt-2 shrink-0 flex justify-between uppercase">
                   <span>Returned: {mapSuggestions.length} Landmark Vectors</span>
                   <span>Click "Plot Map" to render inside the Aerospace Grid above</span>
                 </div>
@@ -753,7 +745,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
         </div>
       )}
 
-      {/* Advanced Visualizer: Tactical Radar Overlay & Network Routing Hops */}
+      {/* Advanced Visualizer */}
       {data && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
@@ -765,18 +757,13 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
             </div>
             
             <div className="relative flex-1 flex items-center justify-center my-2">
-              {/* Spinning/pulsing radar sweep design */}
               <div className="w-36 h-36 rounded-full border border-brand-orange/20 relative flex items-center justify-center shadow-[inset_0_0_20px_rgba(249,115,22,0.05)]">
                 <div className="w-24 h-24 rounded-full border border-dashed border-brand-orange/40 flex items-center justify-center">
                   <div className="w-12 h-12 rounded-full border border-brand-orange/15" />
                 </div>
-                {/* Horizontal line */}
                 <div className="absolute w-full h-[1px] bg-brand-orange/15 left-0" />
-                {/* Vertical line */}
                 <div className="absolute h-full w-[1px] bg-brand-orange/15 top-0" />
-                {/* Sweep Hand */}
                 <div className="absolute w-[72px] h-[72px] origin-bottom-right bottom-1/2 right-1/2 bg-gradient-to-tl from-brand-orange/20 to-transparent border-r border-brand-orange/50 rounded-tl-full rotate-sweep" />
-                {/* Pulse points representing latitude coordinates */}
                 <div className="absolute top-1/4 left-1/3 w-2.5 h-2.5 rounded-full bg-brand-orange border border-white animate-ping" />
                 <div className="absolute top-1/4 left-1/3 w-1.5 h-1.5 rounded-full bg-brand-orange shadow-[0_0_8px_#f97316]" />
               </div>
@@ -788,7 +775,7 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
             </div>
           </div>
 
-          {/* Network Routing Hops Trace Diagram -- Multi-degree topology tracer */}
+          {/* Network Routing Hops Trace Diagram */}
           <div className="bg-[#0f172a] rounded-xl border border-gray-800 p-5 font-mono text-left space-y-4 lg:col-span-2 flex flex-col justify-between h-[260px]">
             <div>
               <span className="text-[10px] text-brand-orange font-bold uppercase tracking-widest block mb-1">TRACEWAY ROUTING VECTOR TOPOLOGY</span>
@@ -796,22 +783,18 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
             </div>
 
             <div className="relative flex-1 py-1 flex items-center justify-around gap-2 overflow-x-auto">
-              
-              {/* Node 1: Origin Console */}
               <div className="flex flex-col items-center z-10 min-w-[70px]">
-                <div className="w-10 h-10 rounded-lg bg-gray-950 border border-gray-750 flex items-center justify-center relative glow-orange font-extrabold">
+                <div className="w-10 h-10 rounded-lg bg-gray-950 border border-gray-750 flex items-center justify-center relative font-extrabold">
                   <Terminal className="w-4 h-4 text-gray-400" />
                 </div>
                 <span className="text-[9px] text-gray-300 font-bold mt-2 font-mono">CONSOLE</span>
                 <span className="text-[8px] text-gray-500 mt-0.5">LOCAL SOURCE</span>
               </div>
 
-              {/* Connector 1 */}
               <div className="flex-1 h-[2px] bg-gradient-to-r from-gray-800 via-brand-orange/40 to-gray-800 min-w-[30px] relative">
                 <div className="absolute top-1/2 left-1/2 w-1.5 h-1.5 bg-brand-orange rounded-full -translate-x-1/2 -translate-y-1/2 animate-ping" />
               </div>
 
-              {/* Node 2: SECURE AGENT PROXY */}
               <div className="flex flex-col items-center z-10 min-w-[70px]">
                 <div className="w-10 h-10 rounded-lg bg-[#020617] border border-brand-orange/30 flex items-center justify-center">
                   <Layers className="w-4 h-4 text-brand-orange/70" />
@@ -820,12 +803,10 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                 <span className="text-[8px] text-gray-500 mt-0.5">SOG NODE GATEWAY</span>
               </div>
 
-              {/* Connector 2 */}
               <div className="flex-1 h-[2px] bg-gradient-to-r from-gray-800 via-brand-orange/40 to-gray-800 min-w-[30px] relative">
                 <div className="absolute top-1/2 left-1/2 w-1.5 h-1.5 bg-brand-orange rounded-full -translate-x-1/2 -translate-y-1/2 animate-pulse" />
               </div>
 
-              {/* Node 3: REGIONAL AUTONOMOUS SYSTEM */}
               <div className="flex flex-col items-center z-10 min-w-[70px]">
                 <div className="w-10 h-10 rounded-lg bg-[#020617]/90 border border-brand-orange/20 flex items-center justify-center">
                   <Cpu className="w-4 h-4 text-brand-orange/50" />
@@ -834,12 +815,10 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                 <span className="text-[8px] text-gray-500 mt-0.5 uppercase text-ellipsis overflow-hidden max-w-[80px] whitespace-nowrap">{data.traits?.isp || "BGP BACKBONE"}</span>
               </div>
 
-              {/* Connector 3 */}
               <div className="flex-1 h-[2px] bg-gradient-to-r from-gray-800 via-brand-orange/40 to-brand-orange min-w-[30px] relative" />
 
-              {/* Node 4: Target IP Node */}
               <div className="flex flex-col items-center z-10 min-w-[70px]">
-                <div className="w-10 h-10 rounded-lg bg-brand-orange/15 border border-brand-orange flex items-center justify-center glow-orange blink-border">
+                <div className="w-10 h-10 rounded-lg bg-brand-orange/15 border border-brand-orange flex items-center justify-center glow-orange">
                   <Globe className="w-4 h-4 text-brand-orange" />
                 </div>
                 <span className="text-[9px] text-brand-orange font-bold mt-2 font-mono">TARGET VECTOR</span>
@@ -847,15 +826,13 @@ export default function IpLookupTab({ onAddHistory }: IpLookupTabProps) {
                   {inputValue.length < 13 ? inputValue : `${inputValue.substring(0, 9)}...`}
                 </span>
               </div>
-
             </div>
 
-            <div className="text-[9px] text-gray-500 flex justify-between pr-2 border-t border-gray-850/60 pt-2 font-mono">
+            <div className="text-[9px] text-gray-500 flex justify-between pr-2 border-t border-gray-850 pt-2 font-mono">
               <span>DECODE LINK STATUS: ONLINE & AUDITED</span>
               <span>PING RESPONSE: ~24MS</span>
             </div>
           </div>
-
         </div>
       )}
 
