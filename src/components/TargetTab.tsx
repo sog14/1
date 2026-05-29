@@ -292,8 +292,10 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       let isFallbackMode = false;
       
       if (searchType === "phone") {
-        let cleanMain = cleanMobile(queryPayload);
-        if (cleanMain) processedNumbers.add(cleanMain);
+        const queryPhones = extractAllMobiles(queryPayload);
+        queryPhones.forEach(qp => {
+          processedNumbers.add(qp);
+        });
       }
 
       try {
@@ -362,18 +364,16 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       }
 
       fetchedProfiles.forEach(record => {
-        if (record.mobile) {
-          let mClean = cleanMobile(record.mobile);
-          if (mClean) processedNumbers.add(mClean);
-        }
-        
-        ['alt_mobile', 'alt_mobile2', 'alt_mobile3', 'alt_mobile4'].forEach(k => {
-          if (record[k as keyof TargetProfile]) {
-            let cleaned = cleanMobile(record[k as keyof TargetProfile]);
-            if (cleaned && !processedNumbers.has(cleaned)) {
-              step2MobilesToSearch.add(cleaned);
-              processedNumbers.add(cleaned);
-            }
+        ['mobile', 'alt_mobile', 'alt_mobile2', 'alt_mobile3', 'alt_mobile4'].forEach(k => {
+          const val = record[k as 'mobile' | 'alt_mobile' | 'alt_mobile2' | 'alt_mobile3' | 'alt_mobile4'];
+          if (val && val !== "N/A") {
+            const extracted = extractAllMobiles(val);
+            extracted.forEach(cleaned => {
+              if (cleaned && !processedNumbers.has(cleaned)) {
+                step2MobilesToSearch.add(cleaned);
+                processedNumbers.add(cleaned);
+              }
+            });
           }
         });
       });
@@ -1576,7 +1576,6 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between"><span className="text-gray-400 font-mono text-xs">Full Name:</span> <span className="text-white font-semibold font-sans">{p.name || "N/A"}</span></div>
                       <div className="flex justify-between"><span className="text-gray-400 font-mono text-xs">Father's Name:</span> <span className="text-white font-semibold font-sans">{p.father_name || "N/A"}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-400 font-mono text-xs">Mobile Vector:</span> <span className="text-brand-cyan font-mono font-bold tracking-wide">+91 {p.mobile || "N/A"}</span></div>
                       {p.DocumentNumber && p.DocumentNumber !== "N/A" && (
                         <div className="flex justify-between"><span className="text-gray-455 text-[10px]">Identity Doc:</span> <span className="text-white font-mono break-all">{p.DocumentNumber}</span></div>
                       )}
@@ -1606,15 +1605,15 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                       <div className="text-right">Carrier Status: PROVISIONED</div>
                     </div>
 
-                    {(p.alt_mobile || p.alt_mobile2 || p.alt_mobile3 || p.alt_mobile4) && (
+                    {(p.mobile || p.alt_mobile || p.alt_mobile2 || p.alt_mobile3 || p.alt_mobile4) && (
                       <div className="pt-2.5 border-t border-gray-800/40 space-y-1.5">
                         <span className="text-[10px] text-gray-400 font-mono uppercase tracking-wider block">Alternate Contacts (Connected Vectors):</span>
                         <div className="flex flex-wrap gap-1.5 font-mono text-[11px]">
-                          {[p.alt_mobile, p.alt_mobile2, p.alt_mobile3, p.alt_mobile4]
+                          {[p.mobile, p.alt_mobile, p.alt_mobile2, p.alt_mobile3, p.alt_mobile4]
                             .map((alt, i) => alt && alt !== "N/A" ? (
                               <div key={i} className="bg-[#020617] border border-gray-800 hover:border-brand-cyan/20 transition-all text-white px-2 py-1 rounded flex items-center gap-1.5">
                                 <Phone className="w-2.5 h-2.5 text-brand-cyan" />
-                                <span className="text-gray-400">#0{i+1}:</span>
+                                <span className="text-gray-400 font-mono">#0{i+1}:</span>
                                 <span className="text-brand-cyan font-semibold">+91 {cleanMobile(alt) || alt}</span>
                               </div>
                             ) : null)
