@@ -8,15 +8,10 @@ import { TargetProfile, SherlockProfile } from "../types";
 import { jsPDF } from "jspdf";
 
 // ========================================================
-// PRODUCTION OSINT ROUTING CROSS-ORIGIN CONFIGURATION
+// CORE PRODUCTION ENDPOINT INTEGRATION
 // ========================================================
-// GitHub Pages hosts static layouts only. We force-route production queries out to your cloud engine.
-const PRODUCTION_BACKEND_URL = "https://true-call-check.vercel.app"; 
-
-const API_BASE_URL = typeof window !== "undefined" && 
-  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-    ? "" 
-    : PRODUCTION_BACKEND_URL;
+const PRODUCTION_API_URL = "https://true-call-check.vercel.app/api/truecallcheckApi";
+const SHERLOCK_API_URL = "https://api-developers-sherlock-osint.sherlock-dev.workers.dev/api/number";
 
 const getHopColorScheme = (hop: number) => {
   switch (hop) {
@@ -32,7 +27,7 @@ const getHopColorScheme = (hop: number) => {
         line: "border-cyan-500/30",
         accentText: "text-cyan-300"
       };
-    case 2:
+    default:
       return {
         text: "text-emerald-400",
         border: "border-emerald-500/30 hover:border-emerald-400/60",
@@ -44,26 +39,13 @@ const getHopColorScheme = (hop: number) => {
         line: "border-emerald-500/30",
         accentText: "text-emerald-300"
       };
-    default:
-      return {
-        text: "text-amber-400",
-        border: "border-amber-500/30 hover:border-amber-400/60",
-        bg: "bg-amber-950/25 bg-opacity-40",
-        badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-        glow: "shadow-[0_0_15px_rgba(245,158,11,0.2)]",
-        marker: "bg-amber-400 border-amber-500",
-        markerDot: "bg-amber-100",
-        line: "border-amber-500/30",
-        accentText: "text-amber-300"
-      };
   }
 };
 
 const getSolidHopBg = (hop: number) => {
   switch (hop) {
     case 1: return "bg-cyan-500 text-slate-950 shadow-cyan-500/25";
-    case 2: return "bg-emerald-500 text-slate-950 shadow-emerald-500/25";
-    default: return "bg-amber-500 text-slate-950 shadow-amber-500/25";
+    default: return "bg-emerald-500 text-slate-950 shadow-emerald-500/25";
   }
 };
 
@@ -303,24 +285,20 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
     }
 
     try {
+      // 1. STEP 1: PARSE CORE QUERY CHANNELS
       const processedNumbers = new Set<string>();
-      let discoveryQueue: string[] = [];
+      const step2MobilesToSearch = new Set<string>();
       let fetchedProfiles: TargetProfile[] = [];
       let isFallbackMode = false;
       
       if (searchType === "phone") {
         let cleanMain = cleanMobile(queryPayload);
-        if (cleanMain) {
-          processedNumbers.add(cleanMain);
-        }
+        if (cleanMain) processedNumbers.add(cleanMain);
       }
 
       try {
-        const response = await fetch(`${API_BASE_URL}/api/search-targets`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: queryPayload, type: searchType })
-        });
+        // CORRECTION: Convert to parameter syntax mapping required by target production configurations
+        const response = await fetch(`${PRODUCTION_API_URL}?newKey=${encodeURIComponent(queryPayload)}&IndNum=${encodeURIComponent(queryPayload)}`);
         
         if (response.ok) {
           const resData = await response.json();
@@ -328,7 +306,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
           
           if (rawItems[0] && rawItems[0].howmuchyouneedtowait) {
             const secs = parseInt(rawItems[0].howmuchyouneedtowait) || 35;
-            setError(`== TERMINAL SECURITY RATE-LIMIT INTERCEPT == SECURITY OVERHEAT PROTECTION ACTIVE. WAIT ${secs} SECONDS.`);
+            setError(`== TERMINAL SECURITY RATE-LIMIT INTERCEPT == PROTECTION ACTIVE. WAIT ${secs} SECONDS.`);
             setLoading(false);
             return;
           }
@@ -386,16 +364,14 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       fetchedProfiles.forEach(record => {
         if (record.mobile) {
           let mClean = cleanMobile(record.mobile);
-          if (mClean) {
-            processedNumbers.add(mClean);
-          }
+          if (mClean) processedNumbers.add(mClean);
         }
         
         ['alt_mobile', 'alt_mobile2', 'alt_mobile3', 'alt_mobile4'].forEach(k => {
           if (record[k as keyof TargetProfile]) {
             let cleaned = cleanMobile(record[k as keyof TargetProfile]);
             if (cleaned && !processedNumbers.has(cleaned)) {
-              discoveryQueue.push(cleaned);
+              step2MobilesToSearch.add(cleaned);
               processedNumbers.add(cleaned);
             }
           }
@@ -403,24 +379,23 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       });
 
       setProfiles(fetchedProfiles);
-      onLinkDetected(fetchedProfiles);
 
       const phoneQueries = searchType === "phone" ? extractAllMobiles(inputValue) : [];
       const primaryPhoneQuery = phoneQueries[0] || null;
       
       if (primaryPhoneQuery) {
         try {
-          const sherlockRes = await fetch(`${API_BASE_URL}/api/sherlock-mock`, {
+          const sherlockRes = await fetch(SHERLOCK_API_URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ number: primaryPhoneQuery })
+            headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+            body: JSON.stringify({ number: "+91" + primaryPhoneQuery })
           });
           if (sherlockRes.ok) {
             const shData = await sherlockRes.json();
             if (shData.success) setSherlock(shData.data);
           }
         } catch (e) {
-          console.error("Sherlock layer error bypassed safely.");
+          console.error("Sherlock link extraction bypassed.");
         }
       }
 
@@ -444,11 +419,8 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
 
         if (subProfiles.length === 0) {
           try {
-            const crawlRes = await fetch(`${API_BASE_URL}/api/search-targets`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query: num, type: "phone" })
-            });
+            // CORRECTION: Convert recursive path parameters to match target parameters
+            const crawlRes = await fetch(`${PRODUCTION_API_URL}?newKey=${num}&IndNum=${num}`);
             if (crawlRes.ok) {
               const subData = await crawlRes.json();
               if (subData?.data && Array.isArray(subData.data)) {
@@ -456,7 +428,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
               }
             }
           } catch (err) {
-            // Execution context drop fallback
+            // Server error boundary drop bypass
           }
         }
 
@@ -467,54 +439,32 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
         return subProfiles;
       };
 
-      const finalRecursiveMatches: TargetProfile[] = [];
-      let hopCounterTracker = 1;
+      // 2. STEP 2: SWEEP ONLY DEDICATED DIRECT ALTERNATIVES
+      const finalUniqueRecursiveCards: TargetProfile[] = [];
+      const seenKeys = new Set<string>();
+      let indexTracker = 1;
 
-      while (discoveryQueue.length > 0) {
-        let altNum = discoveryQueue.shift()!;
+      for (const altNum of Array.from(step2MobilesToSearch)) {
         const derivedProfiles = await fetchUniqueRecordsForNumber(altNum);
         
         for (const subRecord of derivedProfiles) {
           if (!subRecord) continue;
-          
-          let subMobClean = cleanMobile(subRecord.mobile);
-          if (subMobClean && !processedNumbers.has(subMobClean)) {
-            discoveryQueue.push(subMobClean);
-            processedNumbers.add(subMobClean);
+
+          const uniqueKey = `${(subRecord.name || "").trim().toUpperCase()}_${(subRecord.mobile || "").trim()}`;
+          if (!seenKeys.has(uniqueKey)) {
+            seenKeys.add(uniqueKey);
+            
+            const parsedRecord = { ...subRecord };
+            parsedRecord.hopCount = 1; 
+            parsedRecord.linkedVia = `+91 ${altNum} (Direct alternate contact trace from core target profile)`;
+            finalUniqueRecursiveCards.push(parsedRecord);
+            indexTracker++;
           }
-
-          ['alt_mobile', 'alt_mobile2', 'alt_mobile3', 'alt_mobile4'].forEach(k => {
-            if (subRecord[k as keyof TargetProfile]) {
-              let cleanAlt = cleanMobile(subRecord[k as keyof TargetProfile]);
-              if (cleanAlt && !processedNumbers.has(cleanAlt)) {
-                discoveryQueue.push(cleanAlt);
-                processedNumbers.add(cleanAlt);
-              }
-            }
-          });
-
-          subRecord.hopCount = hopCounterTracker <= 12 ? 1 : 2; 
-          subRecord.linkedVia = `+91 ${altNum} (Linked structural node verification trace loop)`;
-          finalRecursiveMatches.push(subRecord);
-          hopCounterTracker++;
         }
       }
 
-      const deduplicatedRecursiveList: TargetProfile[] = [];
-      const seenKeys = new Set<string>();
-
-      finalRecursiveMatches.forEach(item => {
-        const uniqueKey = `${(item.name || "").trim().toUpperCase()}_${(item.mobile || "").trim()}`;
-        if (!seenKeys.has(uniqueKey)) {
-          seenKeys.add(uniqueKey);
-          deduplicatedRecursiveList.push(item);
-        }
-      });
-
-      setRecursiveMatches(deduplicatedRecursiveList);
-      if (deduplicatedRecursiveList.length > 0) {
-        onLinkDetected([...fetchedProfiles, ...deduplicatedRecursiveList]);
-      }
+      setRecursiveMatches(finalUniqueRecursiveCards);
+      onLinkDetected([...fetchedProfiles, ...finalUniqueRecursiveCards]);
 
     } catch (err: any) {
       setError(err.message || "An issue occurred while searching target records.");
@@ -532,7 +482,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
     const allProfiles = [...profiles, ...recursiveMatches];
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/analyze-linkages`, {
+      const response = await fetch(`/api/analyze-linkages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profiles: allProfiles })
@@ -1723,7 +1673,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                     <Workflow className="w-4 h-4 text-brand-orange" /> Associated / Linked Entity Records (Alternate Number Crawler)
                   </h3>
                   <p className="text-[11px] text-gray-400 font-mono">
-                    Deep trace analysis recovered <span className="text-brand-orange font-bold font-mono">{recursiveMatches.length} linked entity nodes</span> across various connection hops.
+                    Deep trace analysis recovered <span className="text-brand-orange font-bold font-mono">{recursiveMatches.length} linked entity nodes</span> associated with the target profile.
                   </p>
                 </div>
 
@@ -1994,8 +1944,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                           </span>
                           <span className="text-xs font-bold font-mono text-white tracking-wider uppercase">
                             {hopNum === 1 && "First-Degree Connection Loop (Direct Core Alternate)"}
-                            {hopNum === 2 && "Second-Degree Transitive Network (Secondary Deviation Link)"}
-                            {hopNum >= 3 && `Degree ${hopNum} Remote Network Branch`}
+                            {hopNum >= 2 && `Degree ${hopNum} Remote Network Branch`}
                           </span>
                           <span className="text-[10px] text-gray-500 font-mono ml-auto">({hopMatches.length} Profile Nodes)</span>
                         </div>
