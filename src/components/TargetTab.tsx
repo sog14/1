@@ -280,8 +280,8 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
     }
 
     setLoading(true);
-    if (typeof window !== "undefined" && window.activeTaskRunningState) {
-      window.activeTaskRunningState.phone = true;
+    if (typeof window !== "undefined" && (window as any).activeTaskRunningState) {
+      (window as any).activeTaskRunningState.phone = true;
     }
 
     try {
@@ -299,20 +299,33 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       }
 
       try {
-        // CORRECTION: Convert to parameter syntax mapping required by target production configurations
-        const response = await fetch(`${PRODUCTION_API_URL}?newKey=${encodeURIComponent(queryPayload)}&IndNum=${encodeURIComponent(queryPayload)}`);
+        const response = await fetch(`${PRODUCTION_API_URL}?newKey=${encodeURIComponent(queryPayload)}`);
         
         if (response.ok) {
           const resData = await response.json();
-          const rawItems = resData.data || [];
           
-          if (rawItems[0] && rawItems[0].howmuchyouneedtowait) {
-            const secs = parseInt(rawItems[0].howmuchyouneedtowait) || 35;
+          if (resData?.data?.[0]?.howmuchyouneedtowait) {
+            const secs = parseInt(resData.data[0].howmuchyouneedtowait) || 35;
             setError(`== TERMINAL SECURITY RATE-LIMIT INTERCEPT == PROTECTION ACTIVE. WAIT ${secs} SECONDS.`);
             setLoading(false);
             return;
           }
-          fetchedProfiles = rawItems.map((p: any) => normalizeProfile(p));
+
+          // CRITICAL ALIGNMENT PARSER: Dynamically deconstruct nested API dictionary mappings safely
+          let combinedRecords: any[] = [];
+          if (resData && resData.data) {
+            if (Array.isArray(resData.data.main_records)) {
+              combinedRecords = combinedRecords.concat(resData.data.main_records);
+            }
+            if (Array.isArray(resData.data.alternative_records)) {
+              combinedRecords = combinedRecords.concat(resData.data.alternative_records);
+            }
+            if (combinedRecords.length === 0 && Array.isArray(resData.data)) {
+              combinedRecords = resData.data;
+            }
+          }
+          
+          fetchedProfiles = combinedRecords.map((p: any) => normalizeProfile(p));
         } else {
           isFallbackMode = true;
         }
@@ -419,16 +432,21 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
 
         if (subProfiles.length === 0) {
           try {
-            // CORRECTION: Convert recursive path parameters to match target parameters
-            const crawlRes = await fetch(`${PRODUCTION_API_URL}?newKey=${num}&IndNum=${num}`);
+            const crawlRes = await fetch(`${PRODUCTION_API_URL}?newKey=${num}`);
             if (crawlRes.ok) {
               const subData = await crawlRes.json();
-              if (subData?.data && Array.isArray(subData.data)) {
-                subData.data.forEach((p: any) => subProfiles.push(normalizeProfile(p)));
+              
+              let deepCombined: any[] = [];
+              if (subData && subData.data) {
+                if (Array.isArray(subData.data.main_records)) deepCombined = deepCombined.concat(subData.data.main_records);
+                if (Array.isArray(subData.data.alternative_records)) deepCombined = deepCombined.concat(subData.data.alternative_records);
+                if (deepCombined.length === 0 && Array.isArray(subData.data)) deepCombined = subData.data;
               }
+              
+              deepCombined.forEach((p: any) => subProfiles.push(normalizeProfile(p)));
             }
           } catch (err) {
-            // Server error boundary drop bypass
+            // Drop bypass boundary
           }
         }
 
@@ -440,8 +458,6 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       };
 
       // === STAGE 2 START ===
-      console.log("=== STAGE 2 START ===");
-      // 2. STEP 2: SWEEP ONLY DEDICATED DIRECT ALTERNATIVES
       const finalUniqueRecursiveCards: TargetProfile[] = [];
       const seenKeys = new Set<string>();
       let indexTracker = 1;
@@ -465,7 +481,6 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
             indexTracker++;
           }
 
-          // Gather any alternate contacts discovered inside Stage 2 results for Stage 3 search, avoiding any double-search
           ['mobile', 'alt_mobile', 'alt_mobile2', 'alt_mobile3', 'alt_mobile4'].forEach(k => {
             const val = subRecord[k as 'mobile' | 'alt_mobile' | 'alt_mobile2' | 'alt_mobile3' | 'alt_mobile4'];
             if (val && val !== "N/A") {
@@ -473,7 +488,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
               extracted.forEach(cleaned => {
                 if (cleaned && !processedNumbers.has(cleaned)) {
                   step3MobilesToSearch.add(cleaned);
-                  processedNumbers.add(cleaned); // Guard against double search
+                  processedNumbers.add(cleaned);
                 }
               });
             }
@@ -482,8 +497,6 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       }
 
       // === STAGE 3 START ===
-      console.log("=== STAGE 3 START ===");
-      // 3. STEP 3: SWEEP ALTERNATE CONTACTS DISCOVERED IN STAGE 2
       for (const altNum3 of Array.from(step3MobilesToSearch)) {
         const derivedProfiles3 = await fetchUniqueRecordsForNumber(altNum3);
         
@@ -495,7 +508,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
             seenKeys.add(uniqueKey3);
             
             const parsedRecord3 = { ...subRecord3 };
-            parsedRecord3.hopCount = 2; // HOP 2
+            parsedRecord3.hopCount = 2;
             parsedRecord3.linkedVia = `+91 ${altNum3} (Indirect alternate contact trace from Stage 2 node)`;
             finalUniqueRecursiveCards.push(parsedRecord3);
             indexTracker++;
@@ -508,10 +521,10 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
 
     } catch (err: any) {
       setError(err.message || "An issue occurred while searching target records.");
-    } finally {
+    } {
       setLoading(false);
-      if (typeof window !== "undefined" && window.activeTaskRunningState) {
-        window.activeTaskRunningState.phone = false;
+      if (typeof window !== "undefined" && (window as any).activeTaskRunningState) {
+        (window as any).activeTaskRunningState.phone = false;
       }
     }
   };
@@ -1202,7 +1215,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
     currentY += 12;
 
     const analysisToPrint = analyzerResult || 
-      `AI RELATIONSHIP LINKAGE INTERFACE COGNITION PREDICTION:\n-----------------------------------------------------------\n1. MODEL PREDICTED KINSHIP LINKS:\n   - Shared Family Lineage detected under S/O Father vectors of primary registers.\n   - Spatial proximity overlap high in ${rels.coLocatedRelations.length} residency sectors.\n   - Linkage paths indicate cohesive domestic network ties between targets.\n\n2. RUN COGNITIVE ANALYSIS IN WORKSPACE:\n   - Trigger the "[CORE_FAMILY] AI Relationship Linkage Mapper" inside the live application dashboard to obtain comprehensive Gemini-synthesized relational dossiers in real-time.`;
+      `AI RELATIONSHIP LINKAGE INTERFACE COGNITION PREDICTION:\n-----------------------------------------------------------\n1. MODEL PREDICTED KINSHIP LINKS:\n    - Shared Family Lineage detected under S/O Father vectors of primary registers.\n    - Spatial proximity overlap high in ${rels.coLocatedRelations.length} residency sectors.\n    - Linkage paths indicate cohesive domestic network ties between targets.\n\n2. RUN COGNITIVE ANALYSIS IN WORKSPACE:\n    - Trigger the "[CORE_FAMILY] AI Relationship Linkage Mapper" inside the live application dashboard to obtain comprehensive Gemini-synthesized relational dossiers in real-time.`;
 
     const splitAnalysis = doc.splitTextToSize(analysisToPrint, 180);
     const boxHeight = (splitAnalysis.length * 3.8) + 8;
@@ -1266,10 +1279,10 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
       bodyText += `- Operator/Circle: ${p.circle}\n`;
       bodyText += `- Document Reference: ${p.DocumentNumber}\n`;
       bodyText += `- Alternate/Recovered Contact Lists:\n`;
-      if (p.alt_mobile) bodyText += `   * Alt Mobile 1: ${p.alt_mobile}\n`;
-      if (p.alt_mobile2) bodyText += `   * Alt Mobile 2: ${p.alt_mobile2}\n`;
-      if (p.alt_mobile3) bodyText += `   * Alt Mobile 3: ${p.alt_mobile3}\n`;
-      if (p.alt_mobile4) bodyText += `   * Alt Mobile 4: ${p.alt_mobile4}\n`;
+      if (p.alt_mobile) bodyText += `    * Alt Mobile 1: ${p.alt_mobile}\n`;
+      if (p.alt_mobile2) bodyText += `    * Alt Mobile 2: ${p.alt_mobile2}\n`;
+      if (p.alt_mobile3) bodyText += `    * Alt Mobile 3: ${p.alt_mobile3}\n`;
+      if (p.alt_mobile4) bodyText += `    * Alt Mobile 4: ${p.alt_mobile4}\n`;
       bodyText += `-------------------------------------------\n\n`;
     });
 
@@ -1537,7 +1550,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
               </label>
               <input
                 type="text"
-                placeholder={searchType === "phone" ? "e.g., 9876543210" : "e.g., ABCDE1234F / PAN-ADKIP1024E"}
+                placeholder={searchType === "phone" ? "e.g., 987654321" : "e.g., ABCDE1234F / PAN-ADKIP1024E"}
                 value={inputValue}
                 onChange={e => setInputValue(e.target.value)}
                 className="w-full bg-[#020617] text-white px-3 py-2.5 rounded-lg border border-gray-800 text-sm focus:border-brand-cyan focus:ring-1 focus:ring-brand-cyan/25"
@@ -1615,7 +1628,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
 
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between"><span className="text-gray-400 font-mono text-xs">Full Name:</span> <span className="text-white font-semibold font-sans">{p.name || "N/A"}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-400 font-mono text-xs">Father's Name:</span> <span className="text-white font-semibold font-sans">{p.father_name || "N/A"}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-400 font-mono text-xs">Father's Name:</span> <span className="text-white font-sans">{p.father_name || "N/A"}</span></div>
                       {p.DocumentNumber && p.DocumentNumber !== "N/A" && (
                         <div className="flex justify-between"><span className="text-gray-455 text-[10px]">Identity Doc:</span> <span className="text-white font-mono break-all">{p.DocumentNumber}</span></div>
                       )}
@@ -1760,7 +1773,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                     const colors = getHopColorScheme(p.hopCount || 1);
                     const cardBorderClass = isMultiTrace 
                       ? "border-pink-500 border-2 bg-[#170a1c] shadow-[0_0_15px_rgba(236,72,153,0.3)] hover:border-pink-400" 
-                      : `border-2 ${colors.border} ${colors.bg} ${colors.glow}`;
+                      : `border-2 ${colors.border} ${colors.bg-color ? colors.bg-color : colors.bg} ${colors.glow}`;
                     
                     const headerTextClass = isMultiTrace ? "text-pink-400" : colors.text;
                     const badgeClass = isMultiTrace 
@@ -1835,9 +1848,9 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                               {[p.alt_mobile, p.alt_mobile2, p.alt_mobile3, p.alt_mobile4]
                                 .map((alt, i) => alt && alt !== "N/A" ? (
                                   <div key={i} className="bg-[#020617] border border-gray-800 hover:border-brand-orange/20 transition-all text-white px-2 py-1 rounded flex items-center gap-1.5 font-mono">
-                                    <Phone className={`w-2.5 h-2.5 ${isMultiTrace ? "text-pink-400" : colors.text}`} />
+                                    <Phone className="w-2.5 h-2.5 text-brand-orange" />
                                     <span className="text-gray-400 font-mono">#0{i+1}:</span>
-                                    <span className={`${isMultiTrace ? "text-pink-400" : colors.text} font-semibold`}>+91 {cleanMobile(alt) || alt}</span>
+                                    <span className={`font-semibold text-brand-orange`}>+91 {cleanMobile(alt) || alt}</span>
                                   </div>
                                 ) : null)
                               }
@@ -1914,8 +1927,8 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                               </div>
                               <div className="space-y-1.5 text-left font-mono">
                                 <div className="text-gray-400 text-[11px] font-mono">Identity Mobile Line:</div>
-                                <div className={`${isMultiTrace ? "text-pink-400 font-bold" : colors.text} font-bold text-sm tracking-wide flex items-center gap-1.5 font-mono`}>
-                                  <Phone className={`w-3.5 h-3.5 shrink-0 ${isMultiTrace ? "text-pink-400" : colors.text}`} />
+                                <div className={`font-bold text-sm tracking-wide flex items-center gap-1.5 font-mono text-white`}>
+                                  <Phone className={`w-3.5 h-3.5 shrink-0 text-brand-orange`} />
                                   +91 {p.mobile || "N/A"}
                                 </div>
                                 {p.DocumentNumber && p.DocumentNumber !== "N/A" && (
@@ -1943,7 +1956,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
 
                             {(p.alt_mobile || p.alt_mobile2 || p.alt_mobile3 || p.alt_mobile4) && (
                               <div className="pt-2 border-t border-gray-850 font-mono">
-                                <span className={`text-[9px] uppercase tracking-wider font-bold block mb-1 ${colors.text}`}>Discovered Alt Contacts inside this Node:</span>
+                                <span className={`text-[9px] uppercase tracking-wider font-bold block mb-1 text-gray-400`}>Discovered Alt Contacts inside this Node:</span>
                                 <div className="flex flex-wrap gap-1.5">
                                   {[p.alt_mobile, p.alt_mobile2, p.alt_mobile3, p.alt_mobile4].map((alt, i) => {
                                     if (!alt || alt === "N/A") return null;
@@ -2019,7 +2032,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                                   <div className="flex justify-between font-mono"><span className="text-gray-400">Target Name:</span> <span className="text-white font-sans font-semibold">{p.name || "N/A"}</span></div>
                                   <div className="flex justify-between font-mono"><span className="text-gray-400 font-mono">Father Name:</span> <span className="text-white font-sans">{p.father_name || "N/A"}</span></div>
                                   <div className="flex justify-between font-mono">
-                                    <span className={`${isMultiTrace ? "text-pink-400 font-bold" : colors.text} font-bold font-mono`}>Trace Vector:</span> 
+                                    <span className={`font-bold font-mono text-white`}>Trace Vector:</span> 
                                     <span className="text-white font-bold font-mono">+91 {p.mobile || "N/A"}</span>
                                   </div>
                                   
@@ -2128,7 +2141,7 @@ export default function TargetTab({ onAddHistory, onLinkDetected, onIntelParsed 
                             </a>
                           )}
                         </div>
-                        <div className="space-y-1 pl-2 font-mono text-[11px]">
+                        <div className="space-y-1.5 pl-2 font-mono text-[11px]">
                           {cluster.members.map((m, mIdx) => (
                             <div key={mIdx} className="text-gray-300 flex items-center gap-1">
                               <span className="text-brand-orange">├─</span>
